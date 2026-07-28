@@ -1,0 +1,338 @@
+package justitemeditor;
+
+import net.fabricmc.api.ModInitializer;
+import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
+import net.minecraft.server.command.CommandManager;
+import net.minecraft.text.Text;
+import net.minecraft.util.Hand;
+import net.minecraft.item.ItemStack;
+import net.minecraft.util.Formatting;
+import net.minecraft.text.TextColor;
+import net.minecraft.nbt.NbtCompound;
+import net.minecraft.nbt.NbtList;
+import net.minecraft.nbt.NbtString;
+
+public class JustItemEditorMod implements ModInitializer {
+    public static final String MOD_ID = "justitemeditor";
+    private static final TextColor PREFIX_COLOR = TextColor.fromRgb(0xFFB657);
+    private static final Text PREFIX = Text.literal("[JIE]").styled(s -> s.withColor(PREFIX_COLOR));
+    private static final Text SEPARATOR = Text.literal(" » ").formatted(Formatting.DARK_GRAY);
+
+    @Override
+    public void onInitialize() {
+        CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> {
+            var root = CommandManager.literal("jie")
+                .requires(source -> source.hasPermissionLevel(2))
+
+                // ==================== COLOR ====================
+                .then(CommandManager.literal("color")
+                    .then(CommandManager.argument("r", net.minecraft.command.argument.IntegerArgumentType.integer(0, 255))
+                        .then(CommandManager.argument("g", net.minecraft.command.argument.IntegerArgumentType.integer(0, 255))
+                            .then(CommandManager.argument("b", net.minecraft.command.argument.IntegerArgumentType.integer(0, 255))
+                                .executes(context -> {
+                                    var player = context.getSource().getPlayer();
+                                    ItemStack stack = player.getMainHandStack();
+                                    int r = net.minecraft.command.argument.IntegerArgumentType.getInteger(context, "r");
+                                    int g = net.minecraft.command.argument.IntegerArgumentType.getInteger(context, "g");
+                                    int b = net.minecraft.command.argument.IntegerArgumentType.getInteger(context, "b");
+                                    int color = (r << 16) | (g << 8) | b;
+
+                                    String itemName = stack.getItem().toString();
+                                    if (itemName.contains("leather") ||
+                                        itemName.contains("potion") ||
+                                        itemName.contains("tipped_arrow") ||
+                                        itemName.contains("dye") ||
+                                        itemName.contains("bundle") ||
+                                        itemName.contains("shulker_box") ||
+                                        itemName.contains("candle") ||
+                                        itemName.contains("firework") ||
+                                        itemName.contains("wool") ||
+                                        itemName.contains("carpet") ||
+                                        itemName.contains("terracotta") ||
+                                        itemName.contains("concrete") ||
+                                        itemName.contains("glass") ||
+                                        itemName.contains("bed")) {
+                                        
+                                        NbtCompound display = stack.getOrCreateSubNbt("display");
+                                        display.putInt("color", color);
+                                        player.setStackInHand(Hand.MAIN_HAND, stack);
+                                        sendFeedback(context, Text.literal("Цвет установлен! RGB: " + r + ", " + g + ", " + b)
+                                            .formatted(Formatting.GREEN));
+                                    } else {
+                                        sendError(context, Text.literal("Этот предмет не поддерживает цвет!"));
+                                    }
+                                    return 1;
+                                })
+                            )
+                        )
+                    )
+                )
+
+                // ==================== COUNT ====================
+                .then(CommandManager.literal("count")
+                    .then(CommandManager.argument("amount", net.minecraft.command.argument.IntegerArgumentType.integer(1, 99))
+                        .executes(context -> {
+                            var player = context.getSource().getPlayer();
+                            ItemStack stack = player.getMainHandStack();
+                            int amount = net.minecraft.command.argument.IntegerArgumentType.getInteger(context, "amount");
+                            stack.setCount(amount);
+                            player.setStackInHand(Hand.MAIN_HAND, stack);
+                            sendFeedback(context, Text.literal("Количество установлено: " + amount)
+                                .formatted(Formatting.AQUA));
+                            return 1;
+                        })
+                    )
+                )
+
+                // ==================== CUSTOM-TAGS ====================
+                .then(CommandManager.literal("custom-tags")
+                    .then(CommandManager.argument("nbt", net.minecraft.command.argument.NbtCompoundArgumentType.nbtCompound())
+                        .executes(context -> {
+                            var player = context.getSource().getPlayer();
+                            ItemStack stack = player.getMainHandStack();
+                            NbtCompound nbt = net.minecraft.command.argument.NbtCompoundArgumentType.getNbtCompound(context, "nbt");
+                            stack.setNbt(nbt);
+                            player.setStackInHand(Hand.MAIN_HAND, stack);
+                            sendFeedback(context, Text.literal("Кастомные теги установлены!").formatted(Formatting.GREEN));
+                            return 1;
+                        })
+                    )
+                )
+
+                // ==================== DURABILITY ====================
+                .then(CommandManager.literal("durability")
+                    .executes(context -> {
+                        var player = context.getSource().getPlayer();
+                        ItemStack stack = player.getMainHandStack();
+                        if (stack.isDamageable()) {
+                            NbtCompound nbt = stack.getOrCreateNbt();
+                            boolean unbreakable = nbt.getBoolean("Unbreakable");
+                            nbt.putBoolean("Unbreakable", !unbreakable);
+                            player.setStackInHand(Hand.MAIN_HAND, stack);
+                            String status = !unbreakable ? "§aВКЛ" : "§cВЫКЛ";
+                            sendFeedback(context, Text.literal("Неразрушимость: " + status).formatted(Formatting.YELLOW));
+                        } else {
+                            sendError(context, Text.literal("Предмет нельзя сломать!"));
+                        }
+                        return 1;
+                    })
+                )
+
+                // ==================== EMPTYNAME ====================
+                .then(CommandManager.literal("emptyname")
+                    .executes(context -> {
+                        var player = context.getSource().getPlayer();
+                        ItemStack stack = player.getMainHandStack();
+                        NbtCompound display = stack.getOrCreateSubNbt("display");
+                        display.putString("Name", "{\"text\":\"\"}");
+                        player.setStackInHand(Hand.MAIN_HAND, stack);
+                        sendFeedback(context, Text.literal("Имя предмета очищено!").formatted(Formatting.GREEN));
+                        return 1;
+                    })
+                )
+
+                // ==================== ENCHANT ====================
+                .then(CommandManager.literal("enchant")
+                    .then(CommandManager.literal("clear")
+                        .executes(context -> {
+                            var player = context.getSource().getPlayer();
+                            ItemStack stack = player.getMainHandStack();
+                            NbtCompound nbt = stack.getOrCreateNbt();
+                            nbt.remove("Enchantments");
+                            nbt.remove("StoredEnchantments");
+                            player.setStackInHand(Hand.MAIN_HAND, stack);
+                            sendFeedback(context, Text.literal("Все зачарования удалены!").formatted(Formatting.GREEN));
+                            return 1;
+                        })
+                    )
+                    .then(CommandManager.literal("remove")
+                        .then(CommandManager.argument("enchantment", net.minecraft.command.argument.RegistryEntryArgumentType.registryEntry(registryAccess, net.minecraft.registry.RegistryKeys.ENCHANTMENT))
+                            .executes(context -> {
+                                var player = context.getSource().getPlayer();
+                                ItemStack stack = player.getMainHandStack();
+                                var enchantment = net.minecraft.command.argument.RegistryEntryArgumentType.getEnchantment(context, "enchantment");
+                                
+                                NbtCompound nbt = stack.getOrCreateNbt();
+                                if (nbt.contains("Enchantments")) {
+                                    NbtList enchants = nbt.getList("Enchantments", 10);
+                                    for (int i = 0; i < enchants.size(); i++) {
+                                        NbtCompound ench = enchants.getCompound(i);
+                                        if (ench.getString("id").equals(enchantment.getIdAsString())) {
+                                            enchants.remove(i);
+                                            break;
+                                        }
+                                    }
+                                    if (enchants.isEmpty()) {
+                                        nbt.remove("Enchantments");
+                                    }
+                                }
+                                player.setStackInHand(Hand.MAIN_HAND, stack);
+                                sendFeedback(context, Text.literal("Зачарование удалено!").formatted(Formatting.GREEN));
+                                return 1;
+                            })
+                        )
+                    )
+                    .then(CommandManager.literal("set")
+                        .then(CommandManager.argument("enchantment", net.minecraft.command.argument.RegistryEntryArgumentType.registryEntry(registryAccess, net.minecraft.registry.RegistryKeys.ENCHANTMENT))
+                            .then(CommandManager.argument("level", net.minecraft.command.argument.IntegerArgumentType.integer(1, 255))
+                                .executes(context -> {
+                                    var player = context.getSource().getPlayer();
+                                    ItemStack stack = player.getMainHandStack();
+                                    var enchantment = net.minecraft.command.argument.RegistryEntryArgumentType.getEnchantment(context, "enchantment");
+                                    int level = net.minecraft.command.argument.IntegerArgumentType.getInteger(context, "level");
+                                    
+                                    stack.addEnchantment(enchantment, level);
+                                    player.setStackInHand(Hand.MAIN_HAND, stack);
+                                    sendFeedback(context, Text.literal("Зачарование добавлено!").formatted(Formatting.GREEN));
+                                    return 1;
+                                })
+                            )
+                        )
+                    )
+                )
+
+                // ==================== LORE ====================
+                .then(CommandManager.literal("lore")
+                    .then(CommandManager.argument("text", net.minecraft.command.argument.TextArgumentType.text())
+                        .executes(context -> {
+                            var player = context.getSource().getPlayer();
+                            ItemStack stack = player.getMainHandStack();
+                            Text text = net.minecraft.command.argument.TextArgumentType.getTextArgument(context, "text");
+                            
+                            NbtCompound display = stack.getOrCreateSubNbt("display");
+                            NbtList lore = display.getList("Lore", 8);
+                            lore.add(NbtString.of(Text.Serialization.toJsonString(text)));
+                            display.put("Lore", lore);
+                            player.setStackInHand(Hand.MAIN_HAND, stack);
+                            sendFeedback(context, Text.literal("Описание добавлено!").formatted(Formatting.GREEN));
+                            return 1;
+                        })
+                    )
+                )
+
+                // ==================== MODEL ====================
+                .then(CommandManager.literal("model")
+                    .then(CommandManager.argument("item", net.minecraft.command.argument.ItemStackArgumentType.itemStack(registryAccess))
+                        .executes(context -> {
+                            var player = context.getSource().getPlayer();
+                            ItemStack stack = player.getMainHandStack();
+                            var itemStack = net.minecraft.command.argument.ItemStackArgumentType.getItemStackArgument(context, "item");
+                            
+                            NbtCompound display = stack.getOrCreateSubNbt("display");
+                            display.putString("CustomModelData", String.valueOf(itemStack.getItem().hashCode() % 100000));
+                            player.setStackInHand(Hand.MAIN_HAND, stack);
+                            sendFeedback(context, Text.literal("Модель предмета изменена!").formatted(Formatting.GREEN));
+                            return 1;
+                        })
+                    )
+                )
+
+                // ==================== TOOLTIP ====================
+                .then(CommandManager.literal("tooltip")
+                    .then(CommandManager.literal("all")
+                        .then(CommandManager.argument("hidden", net.minecraft.command.argument.BoolArgumentType.bool())
+                            .executes(context -> {
+                                var player = context.getSource().getPlayer();
+                                ItemStack stack = player.getMainHandStack();
+                                boolean hidden = net.minecraft.command.argument.BoolArgumentType.getBool(context, "hidden");
+                                
+                                NbtCompound display = stack.getOrCreateSubNbt("display");
+                                if (hidden) {
+                                    display.putByte("HideTooltip", (byte) 1);
+                                } else {
+                                    display.remove("HideTooltip");
+                                }
+                                player.setStackInHand(Hand.MAIN_HAND, stack);
+                                sendFeedback(context, Text.literal("Тултип: " + (hidden ? "§cвыключен" : "§aвключён")).formatted(Formatting.YELLOW));
+                                return 1;
+                            })
+                        )
+                    )
+                    .then(CommandManager.literal("set")
+                        .then(CommandManager.argument("flag", net.minecraft.command.argument.StringArgumentType.word())
+                            .then(CommandManager.argument("hidden", net.minecraft.command.argument.BoolArgumentType.bool())
+                                .executes(context -> {
+                                    var player = context.getSource().getPlayer();
+                                    ItemStack stack = player.getMainHandStack();
+                                    String flag = net.minecraft.command.argument.StringArgumentType.getString(context, "flag");
+                                    boolean hidden = net.minecraft.command.argument.BoolArgumentType.getBool(context, "hidden");
+                                    
+                                    int flagValue = switch (flag.toLowerCase()) {
+                                        case "enchantments" -> 1;
+                                        case "modifiers" -> 2;
+                                        case "unbreakable" -> 4;
+                                        case "candestroy" -> 8;
+                                        case "canplace" -> 16;
+                                        case "other" -> 32;
+                                        case "dyed" -> 64;
+                                        case "trim" -> 128;
+                                        default -> 0;
+                                    };
+                                    
+                                    NbtCompound nbt = stack.getOrCreateNbt();
+                                    int currentFlags = nbt.getInt("HideFlags");
+                                    if (hidden) {
+                                        currentFlags |= flagValue;
+                                    } else {
+                                        currentFlags &= ~flagValue;
+                                    }
+                                    nbt.putInt("HideFlags", currentFlags);
+                                    player.setStackInHand(Hand.MAIN_HAND, stack);
+                                    sendFeedback(context, Text.literal("Флаг '" + flag + "': " + (hidden ? "§cскрыт" : "§aпоказан")).formatted(Formatting.YELLOW));
+                                    return 1;
+                                })
+                            )
+                        )
+                    )
+                    .then(CommandManager.literal("get")
+                        .executes(context -> {
+                            var player = context.getSource().getPlayer();
+                            ItemStack stack = player.getMainHandStack();
+                            
+                            NbtCompound nbt = stack.getNbt();
+                            StringBuilder info = new StringBuilder("Тултипы:\n");
+                            
+                            if (nbt != null) {
+                                NbtCompound display = nbt.getCompound("display");
+                                if (display.contains("HideTooltip")) {
+                                    info.append("§cОбщий тултип: скрыт\n");
+                                } else {
+                                    info.append("§aОбщий тултип: показан\n");
+                                }
+                                
+                                int flags = nbt.getInt("HideFlags");
+                                info.append("§eФлаги: ");
+                                if (flags == 0) {
+                                    info.append("все показаны");
+                                } else {
+                                    if ((flags & 1) != 0) info.append("enchantments ");
+                                    if ((flags & 2) != 0) info.append("modifiers ");
+                                    if ((flags & 4) != 0) info.append("unbreakable ");
+                                    if ((flags & 8) != 0) info.append("candestroy ");
+                                    if ((flags & 16) != 0) info.append("canplace ");
+                                    if ((flags & 32) != 0) info.append("other ");
+                                    if ((flags & 64) != 0) info.append("dyed ");
+                                    if ((flags & 128) != 0) info.append("trim");
+                                }
+                            } else {
+                                info.append("§7Нет данных NBT");
+                            }
+                            
+                            sendFeedback(context, Text.literal(info.toString()).formatted(Formatting.WHITE));
+                            return 1;
+                        })
+                    )
+                );
+
+            dispatcher.register(root);
+        });
+    }
+
+    private static void sendFeedback(net.minecraft.server.command.ServerCommandSource source, Text message) {
+        source.sendFeedback(() -> PREFIX.copy().append(SEPARATOR).append(message), false);
+    }
+
+    private static void sendError(net.minecraft.server.command.ServerCommandSource source, Text message) {
+        source.sendError(PREFIX.copy().append(SEPARATOR).append(message.formatted(Formatting.RED)));
+    }
+}

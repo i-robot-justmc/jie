@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "id": "justitemeditor",
+  "version": "${version}",
+  "name": "Just Item Editor",
+  "entrypoints": {
+    "main": ["justitemeditor.JustItemEditorMod"]
+  },
+  "depends": {
+    "fabricloader": "*",
+    "minecraft": "~1.21.1",
+    "fabric-api": "*"
+  }
+}
